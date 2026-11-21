@@ -1,0 +1,138 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="UTF-8">
+<title>WAJE</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#071b13;color:white;font-family:Arial,sans-serif}
+header{text-align:center;padding:22px;color:#ffd34d;font-size:30px;font-weight:900}
+main{max-width:600px;margin:auto;padding:14px}
+.panel{background:#123526;border:1px solid #28563a;border-radius:18px;padding:18px;margin:12px 0}
+button{border:0;border-radius:12px;padding:14px;background:#ffca3a;color:#132519;font-weight:bold;font-size:16px;margin:5px}
+select{padding:12px;border-radius:10px;font-size:16px}
+#table{text-align:center}
+.cards{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}
+.card{width:65px;height:100px;background:white;color:#10251a;border-radius:10px;border:3px solid #d8d8d8;font-size:20px;font-weight:bold;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.card small{font-size:12px}
+.card.playable{border-color:#ffca3a;box-shadow:0 0 8px #ffca3a}
+.card:disabled{opacity:.45}
+.hidden{display:none}
+#status{font-size:19px;font-weight:bold;color:#ffdc63}
+</style>
+</head>
+<body>
+<header>★ WAJE ★</header>
+<main>
+<div class="panel" id="setup">
+<h2>Play Whot</h2>
+<label>Players:
+<select id="count">
+<option value="2">2 players</option>
+<option value="3">3 players</option>
+<option value="4">4 players</option>
+</select></label>
+<p>Starting cards: 2 players = 6, 3 = 5, 4 = 4</p>
+<button onclick="startGame()">START GAME</button>
+</div>
+<div id="table" class="hidden">
+<div class="panel">
+<div id="status">Your turn</div>
+<p id="opponents"></p>
+<p>Market: <b id="market"></b></p>
+<p>Top card:</p>
+<div id="top" class="cards"></div>
+<button onclick="drawCard()">DRAW CARD</button>
+<button onclick="restart()">NEW GAME</button>
+</div>
+<div class="panel">
+<h3>Your cards (<span id="handcount"></span>)</h3>
+<div id="hand" class="cards"></div>
+<p id="warning"></p>
+</div>
+</div>
+</main>
+<script>
+const shapes=["Circle","Triangle","Cross","Square","Star"];
+const symbols={Circle:"●",Triangle:"▲",Cross:"✚",Square:"■",Star:"★"};
+let deck=[],hand=[],players=[],market=[],top=null,turn=0,finished=false,chosenShape=null;
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function makeDeck(){
+ let d=[];
+ shapes.forEach(s=>{for(let n=1;n<=14;n++)d.push({s,n})});
+ for(let n=1;n<=20;n++)d.push({s:"Star",n});
+ return shuffle(d);
+}
+function startGame(){
+ let count=+document.getElementById("count").value;
+ let size=count===2?6:count===3?5:4;
+ deck=makeDeck(); hand=[];players=[];
+ for(let i=0;i<count;i++)players.push({name:i===0?"You":"CPU "+i,hand:[]});
+ for(let i=0;i<count;i++)for(let j=0;j<size;j++)players[i].hand.push(deck.pop());
+ hand=players[0].hand;
+ market=deck;top=market.pop();turn=0;finished=false;
+ document.getElementById("setup").classList.add("hidden");
+ document.getElementById("table").classList.remove("hidden");
+ render(); 
+}
+function playable(c){return c.n===20||c.s===top.s||c.n===top.n}
+function render(){
+ document.getElementById("top").innerHTML=cardHTML(top);
+ document.getElementById("market").textContent=market.length;
+ document.getElementById("handcount").textContent=hand.length;
+ document.getElementById("opponents").textContent=players.slice(1).map(p=>p.name+": "+p.hand.length+" cards").join(" | ");
+ document.getElementById("warning").textContent=hand.length===1?"⚠ LAST CARD!": "";
+ document.getElementById("hand").innerHTML=hand.map((c,i)=>`<button class="card ${playable(c)?"playable":""}" onclick="play(${i})" ${turn!==0||finished||!playable(c)?"disabled":""}>${symbols[c.s]}<small>${c.s}</small>${c.n}</button>`).join("");
+ document.getElementById("status").textContent=finished?"GAME OVER":turn===0?"Your turn":"CPU playing…";
+}
+function cardHTML(c){return `<div class="card">${symbols[c.s]}<small>${c.s}</small>${c.n}</div>`}
+function drawOne(p){if(market.length)p.hand.push(market.pop())}
+function drawCard(){if(turn!==0||finished)return;if(!market.length){endGame("Market empty!");return;}drawOne(players[0]);nextTurn();render();cpuTurn()}
+function play(i){
+ if(turn!==0||finished)return;
+ let c=hand[i];if(!playable(c))return;
+ hand.splice(i,1);top=c;
+ if(hand.length===0){endGame("You won!");return}
+ if(c.n===20){
+  let s=prompt("Choose shape: Circle, Triangle, Cross, Square or Star");
+  if(s&&shapes.some(x=>x.toLowerCase()===s.toLowerCase()))top.s=shapes.find(x=>x.toLowerCase()===s.toLowerCase());
+ }
+ if(c.n===1){render();return}
+ if(c.n===2||c.n===5){drawPenalty((c.n===2?2:3));}
+ if(c.s==="Star"&&c.n===8){turn=(turn+2)%players.length;render();cpuTurn();return}
+ if(c.n===14){for(let j=1;j<players.length;j++)drawOne(players[j]);render();return}
+ nextTurn();render();cpuTurn();
+}
+function drawPenalty(n){let next=(turn+1)%players.length;for(let i=0;i<n;i++)drawOne(players[next]);turn=next}
+function nextTurn(){turn=(turn+1)%players.length}
+function cpuTurn(){
+ if(finished||turn===0)return;
+ let p=players[turn],idx=p.hand.findIndex(playable);
+ if(idx>=0){
+  let c=p.hand.splice(idx,1)[0];top=c;
+  if(p.hand.length===0){endGame(p.name+" wins!");return}
+  if(c.n===2||c.n===5){let n=c.n===2?2:3;let target=(turn+1)%players.length;for(let j=0;j<n;j++)drawOne(players[target]);turn=target}
+  else if(c.s==="Star"&&c.n===8){turn=(turn+2)%players.length}
+  else if(c.n===14){players.forEach((x,j)=>{if(j!==turn)drawOne(x)});}
+  else if(c.n!==1)nextTurn();
+  if(turn===0){render();return}
+ }else{
+  drawOne(p);nextTurn();
+ }
+ render();setTimeout(cpuTurn,500);
+}
+function endGame(msg){
+ finished=true;
+ let scores=players.map(p=>p.hand.reduce((sum,c)=>sum+c.n*(c.s==="Star"?2:1),0));
+ let winner=players.reduce((a,b)=>a.hand.length<=b.hand.length?a:b);
+ document.getElementById("status").textContent=msg+" | Market ended. Lowest remaining score: "+Math.min(...scores);
+ alert(msg+"\nCards counted automatically.\n"+players.map((p,i)=>p.name+": "+scores[i]+" points").join("\n"));
+ render();
+}
+function restart(){location.reload()}
+</script>
+</body>
+</html>
